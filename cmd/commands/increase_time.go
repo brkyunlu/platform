@@ -7,7 +7,8 @@ import (
 )
 
 type IncreaseTimeManager struct {
-	TimeManager *TimeManager
+	TimeManager     *TimeManager
+	CampaignManager CampaignManager
 }
 
 func (m *IncreaseTimeManager) IncreaseTime(hours int) time.Time {
@@ -32,11 +33,12 @@ func (m *IncreaseTimeManager) IncreaseTime(hours int) time.Time {
 	}
 	close(campaignStatusChan)
 
-	// Kampanya durumlarını güncelleme işlemini paralel olarak yap
-	// ve sonucu başka bir channel'e aktar
+	// Kampanya durumlarını güncelleme işlemini paralel olarak yap ve sonucu başka bir channel'e aktar
+
 	updatedCampaignsChan := make(chan models.Campaign)
 	for campaign := range campaignStatusChan {
-		go m.updateCampaignStatus(currentTime, campaign, updatedCampaignsChan)
+		go m.CampaignManager.UpdateCampaignStatus(&campaign) // UpdateCampaignStatus fonksiyonunu CampaignManager üzerinden çağırdık
+
 	}
 
 	// Paralel işlemlerin tamamlanmasını bekle
@@ -46,30 +48,4 @@ func (m *IncreaseTimeManager) IncreaseTime(hours int) time.Time {
 	close(updatedCampaignsChan)
 
 	return newTime
-}
-
-func (m *IncreaseTimeManager) updateCampaignStatus(currentTime time.Time, c models.Campaign, updatedCampaignsChan chan models.Campaign) {
-	if c.Status == true && currentTime.After(c.Expiry) {
-		// Kampanya başladıktan sonra belirli saatlerde indirim oranı güncelleme
-		if c.CurrentPriceManipulation > 0 {
-			discountHourly := c.CurrentPriceManipulation / float64(c.Duration) // Saat başına düşen indirim
-			elapsedHours := int(currentTime.Sub(c.Expiry).Hours())
-			newLimit := c.CurrentPriceManipulation - (float64(elapsedHours) * discountHourly)
-			if newLimit < 0 {
-				newLimit = 0
-			}
-			// Kampanya indirim limitini güncelle
-			err := c.Update("current_price_manipulation", newLimit)
-			if err != nil {
-				fmt.Printf("Kampanya \"%s\" indirim limiti güncellenirken bir hata oluştu: %v\n", c.Name, err)
-			}
-		}
-		// Kampanyanın indirim değerlerini sıfırla ve durumunu false olarak işaretle
-		err := c.Updates(models.Campaign{CurrentPriceManipulation: 0, Status: false})
-		if err != nil {
-			fmt.Printf("Kampanya \"%s\" durumu güncellenirken bir hata oluştu: %v\n", c.Name, err)
-		} else {
-			updatedCampaignsChan <- c
-		}
-	}
 }

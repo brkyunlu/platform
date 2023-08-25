@@ -1,3 +1,4 @@
+// order.go
 package commands
 
 import (
@@ -9,17 +10,19 @@ type OrderManager struct {
 	Order models.Order
 }
 
-func (m *OrderManager) CreateOrder(productCode string, quantity int) string {
-	product, err := models.Product{}.Find("code", productCode)
+type OrderManagerInterface interface {
+	CreateOrder(productCode string, quantity int) string
+}
 
+func (m *OrderManager) CreateOrder(productCode string, quantity int) string {
+	product, err := m.Order.Product.Find("code", productCode)
 	if err != nil {
 		return fmt.Sprintf("Ürün bilgileri alınırken bir hata oluştu: %v", err)
 	}
 
-	// Kampanyayı bul ve indirimli fiyatı hesapla
-	campaign, campaignErr := models.Campaign{}.Find("product_id", product.ID)
+	campaign, campaignErr := m.Order.Campaign.Find("product_id", product.ID)
 	if campaignErr == nil {
-		discountedPrice := product.Price * (1 - (campaign.PriceManipulationLimit / 100))
+		discountedPrice := product.Price * (1 - (campaign.CurrentPriceManipulation / 100))
 		product.Price = discountedPrice
 	}
 
@@ -34,14 +37,13 @@ func (m *OrderManager) CreateOrder(productCode string, quantity int) string {
 		TotalPrice: totalPrice,
 	}
 
-	order, err = order.Create()
+	_, err = m.Order.Create()
 	if err != nil {
 		return fmt.Sprintf("Sipariş oluşturulurken bir hata oluştu: %v", err)
 	}
 
-	// Stok güncelleme işlemi
-	discountedStock := product.Stock - quantity
-	err = product.Update("stock", discountedStock)
+	updatedStock := product.Stock - quantity
+	err = m.Order.Product.Update("stock", updatedStock)
 	if err != nil {
 		return fmt.Sprintf("Stok güncellenirken bir hata oluştu: %v", err)
 	}

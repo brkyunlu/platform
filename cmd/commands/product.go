@@ -1,38 +1,46 @@
 package commands
 
 import (
+	"errors"
 	"fmt"
+	"gorm.io/gorm"
 	"platform/internal/models"
 	"platform/internal/validator"
 )
 
 type ProductManager struct {
-	Products models.Product
+	Products    models.Product
+	TimeManager *TimeManager
+}
+type ProductManagerInterface interface {
+	GetProductInfo(code string) (*models.Product, error)
+	CreateProduct(code string, price float64, stock int) (*models.Product, error)
 }
 
-func (manager *ProductManager) GetProductInfo(code string) string {
-	product, err := models.Product{}.Find("code", code)
+func (m *ProductManager) GetProductInfo(code string) (*models.Product, error) {
+	product, err := m.Products.Find("code", code)
 	if err != nil {
-		return "Ürün bulunamadı."
+		if err == gorm.ErrRecordNotFound {
+			return nil, GetErrorMessage("ErrProductNotFound")
+		}
+		return nil, GetErrorMessage("ErrProductQuery")
 	}
 
-	return fmt.Sprintf("Ürün %s bilgisi; fiyat %.2f, stok %d", product.Code, product.Price, product.Stock)
-
+	return &product, nil
 }
 
-func (manager *ProductManager) CreateProduct(code string, price float64, stock int) string {
-	manager.Products = models.Product{Code: code, Price: price, Stock: stock}
+func (m *ProductManager) CreateProduct(code string, price float64, stock int) (*models.Product, error) {
+	product := &models.Product{Code: code, Price: price, Stock: stock}
 
 	v := validator.New()
 
-	if models.ValidateProduct(v, &manager.Products); !v.Valid() {
-		return fmt.Sprint(v.Errors)
+	models.ValidateProduct(v, product)
+	if !v.Valid() {
+		return nil, errors.New(fmt.Sprint(v.Errors))
 	}
-	// Veritabanına kaydet
-	product, createErr := manager.Products.Create()
-	if createErr != nil {
-		return "Ürün oluşturulurken bir hata oluştu."
+	createdProduct, err := m.Products.Create()
+	if err != nil {
+		return nil, GetErrorMessage("ErrProductCreate")
 	}
-
-	return fmt.Sprintf("Ürün oluşturuldu; kod %s, fiyat %.2f, stok %d", product.Code, product.Price, product.Stock)
+	return &createdProduct, nil
 }

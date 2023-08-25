@@ -1,10 +1,13 @@
 package commands
 
 import (
+	"errors"
 	"fmt"
+	"gorm.io/gorm"
 	"math/rand"
 	"platform/internal/models"
 	"platform/internal/validator"
+	"time"
 )
 
 type CampaignManager struct {
@@ -12,47 +15,92 @@ type CampaignManager struct {
 	TimeManager *TimeManager
 }
 
-func (m *CampaignManager) GetCampaignInfo(name string) string {
-	var err error
-	m.Campaigns, err = models.Campaign{}.Find("name", name)
+type CampaignManagerInterface interface {
+	GetCampaignInfo(name string) (*models.Campaign, error)
+	CreateCampaign(name string, productCode string, duration int, limit float64, targetSales int) (*models.Campaign, error)
+}
+
+func (m *CampaignManager) GetCampaignInfo(name string) (*models.Campaign, error) {
+	campaign, err := m.Campaigns.Find("name", name)
 	if err != nil {
-		return "Kampanya bulunamadı."
+		return nil, GetErrorMessage("ErrCampaignNotFound")
 	}
 
 	// Kampanya süresi dolmuşsa ve durum aktifse durumu güncelle
-	currentTime := m.TimeManager.Now() // Şu anki zamanı al
-	if m.Campaigns.Duration <= 0 && m.Campaigns.Status && currentTime.After(m.Campaigns.Expiry) {
-		m.Campaigns.Status = false
-		err = m.Campaigns.Update("status", false)
-		if err != nil {
-			return "Kampanya durumu güncellenirken bir hata oluştu."
+	currentTime := m.TimeManager.Now()
+	if campaign.Duration <= 0 && campaign.Status && currentTime.After(campaign.Expiry) {
+		campaign.Status = false
+		if err := campaign.Update("status", false); err != nil {
+			return nil, GetErrorMessage("ErrCampaignUpdate")
 		}
 	}
-	averagePrice := float64(m.Campaigns.TotalSales) / float64(m.Campaigns.TargetSales)
-	return fmt.Sprintf(`Kampanya "%s" bilgisi; Durum Aktif, Hedef Satış %d, Toplam Satış %d, Ciro %.2f, Ortalama Ürün Fiyatı %.2f`,
-		m.Campaigns.Name, m.Campaigns.TargetSales, m.Campaigns.TotalSales, float64(m.Campaigns.TotalSales)*averagePrice, averagePrice)
+
+	return &campaign, nil
 }
 
-func (m *CampaignManager) CreateCampaign(name string, productID int64, duration int, limit float64, targetSales int) string {
+func (m *CampaignManager) CreateCampaign(name string, productCode string, duration int, limit float64, targetSales int) (*models.Campaign, error) {
+	product, err := m.Campaigns.Product.Find("code = ?", productCode)
+
+	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, GetErrorMessage("ErrProductNotFound")
+		}
+		return nil, GetErrorMessage("ErrProductQuery")
+	}
+
+	// Ürüne ait aktif kampanyayı kontrol et
+	existingCampaign, _ := m.Campaigns.Find("product_id = ? AND status = ?", product.ID, true)
+
+	if existingCampaign.Expiry.After(m.TimeManager.Now()) {
+		return nil, GetErrorMessage("ErrActiveCampaignExists")
+	}
+
 	randomLimit := rand.Float64() * limit
-	m.Campaigns = models.Campaign{
+	currentTime := m.TimeManager.Now()
+	expiryTime := currentTime.Add(time.Hour * time.Duration(duration))
+
+	campaign := &models.Campaign{
 		Name:                     name,
-		ProductID:                productID,
+		ProductID:                product.ID,
 		Duration:                 duration,
 		PriceManipulationLimit:   limit,
 		TargetSales:              targetSales,
-		CurrentPriceManipulation: randomLimit, // Yeni alanı ayarla
+		CurrentPriceManipulation: randomLimit,
+		Status:                   true,
+		Expiry:                   expiryTime,
 	}
-	v := validator.New()
 
-	if models.ValidateCampaign(v, &m.Campaigns); !v.Valid() {
-		return fmt.Sprint(v.Errors)
+	v := validator.New()
+	if models.ValidateCampaign(v, campaign); !v.Valid() {
+		return nil, errors.New(fmt.Sprint(v.Errors))
 	}
-	// Veritabanına kaydet
-	campaign, createErr := m.Campaigns.Create()
-	if createErr != nil {
-		return "kampanya oluşturulurken bir hata oluştu."
+
+	if _, createErr := m.Campaigns.Create(); createErr != nil {
+		return nil, GetErrorMessage("ErrCampaignCreate")
 	}
-	return fmt.Sprintf("Kampanya oluşturuldu; adı %s, ürün %s, süre %d saat, limit %.2f, hedef satış %d",
-		campaign.Name, campaign.ProductID, campaign.Duration, campaign.PriceManipulationLimit, campaign.TargetSales)
+
+	return campaign, nil
+}
+func (m *CampaignManager) UpdateCampaignStatus(campaign *models.Campaign) error {
+	currentTime := m.TimeManager.Now()
+
+	if campaign.Status && currentTime.After(campaign.Expiry) {
+		if campaign.CurrentPriceManipulation > 0 {
+			discountHourly := campaign.CurrentPriceManipulation / float64(campaign.Duration)
+			elapsedHours := int(currentTime.Sub(campaign.Expiry).Hours())
+			newLimit := campaign.CurrentPriceManipulation - (float64(elapsedHours) * discountHourly)
+			if newLimit < 0 {
+				newLimit = 0
+			}
+			err := campaign.Update("current_price_manipulation", newLimit)
+			if err != nil {
+				return fmt.Errorf("Kampanya \"%s\" indirim limiti güncellenirken bir hata oluştu: %v", campaign.Name, err)
+			}
+		}
+		err := campaign.Updates(models.Campaign{CurrentPriceManipulation: 0, Status: false})
+		if err != nil {
+			return fmt.Errorf("Kampanya \"%s\" durumu güncellenirken bir hata oluştu: %v", campaign.Name, err)
+		}
+	}
+	return nil
 }
