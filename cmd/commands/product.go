@@ -30,11 +30,11 @@ func (m *ProductManager) GetProductInfo(code string) (*models.Product, error) {
 }
 
 func (m *ProductManager) CreateProduct(code string, price float64, stock int) (*models.Product, error) {
-	product := &models.Product{Code: code, Price: price, Stock: stock}
+	m.Products = models.Product{Code: code, Price: price, Stock: stock}
 
 	v := validator.New()
 
-	models.ValidateProduct(v, product)
+	models.ValidateProduct(v, &m.Products)
 	if !v.Valid() {
 		return nil, errors.New(fmt.Sprint(v.Errors))
 	}
