@@ -3,7 +3,6 @@ package client
 import (
 	_ "github.com/lib/pq"
 	"gorm.io/gorm"
-	"log"
 	"os"
 	"platform/internal/database"
 )
@@ -18,6 +17,5 @@ func GetPostgreSqlClient() *gorm.DB {
 		postgresSsl  = os.Getenv("POSTGRES_SSL")
 	)
 
-	log.Println("Initialize PostgreSQL connection...")
 	return database.GetPostgreSqlConnection(postgresHost, postgresUser, postgresPass, postgresDb, postgresPort, postgresSsl)
 }

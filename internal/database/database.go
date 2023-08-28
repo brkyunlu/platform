@@ -14,6 +14,5 @@ func GetPostgreSqlConnection(postgresHost, postgresUser, postgresPass, postgresD
 	if err != nil {
 		log.Fatalln(err.Error())
 	}
-	log.Println("successfully connected to the database")
 	return db
 }

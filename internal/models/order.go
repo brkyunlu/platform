@@ -3,11 +3,11 @@ package models
 import "platform/internal/client"
 
 type Order struct {
-	ID         int64    `gorm:"primary_key"`
-	ProductID  int64    `json:"-"`
-	Product    Product  `json:"product" gorm:"references:ID"`
-	CampaignID int64    `json:"-"`
-	Campaign   Campaign `json:"campaign" gorm:"references:ID"`
+	ID         int64     `gorm:"primary_key"`
+	ProductID  int64     `json:"-"`
+	Product    Product   `json:"product" gorm:"references:ID"`
+	CampaignID *int64    `json:"-"`
+	Campaign   *Campaign `json:"campaign" gorm:"references:ID"`
 	Quantity   int
 	TotalPrice float64
 }

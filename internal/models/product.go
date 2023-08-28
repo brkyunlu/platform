@@ -4,6 +4,7 @@ import (
 	"platform/internal/client"
 	"platform/internal/validator"
 	"regexp"
+	"time"
 )
 
 type Product struct {
@@ -40,12 +41,22 @@ func (product Product) Count(column string, value interface{}) int64 {
 	postClient.Count(&counter)
 	return counter
 }
+func (product Product) GetActiveCampaignsForProduct(productID int64, simulatedTime time.Time) ([]Campaign, error) {
+	var campaigns []Campaign
+
+	result := client.PostgreSqlClient.Where("product_id = ? AND status = ? AND expiry > ?", productID, true, simulatedTime).Find(&campaigns)
+	if result.Error != nil {
+		return nil, result.Error
+	}
+
+	return campaigns, nil
+}
 func ValidateProduct(v *validator.Validator, product *Product) {
-	v.Check(product.Code != "", "code", "boş bırakılamaz")
+	v.Check(product.Code != "", "code", "cannot empty")
 
-	v.Check(product.Price >= 0, "price", "pozitif bir sayı olmalıdır")
+	v.Check(product.Price >= 0, "price", "must be a positive number")
 
-	v.Check(product.Stock >= 0, "stock", "pozitif bir sayı olmalıdır")
+	v.Check(product.Stock >= 0, "stock", "must be a positive number")
 	product.ValidateUniqueCode(v) //check unique code
 	product.ValidateCodeFormat(v) //check code format (just use 0-1 && A-Z)
 }
@@ -53,13 +64,13 @@ func (product Product) ValidateUniqueCode(v *validator.Validator) {
 	var existingProduct Product
 	result := client.PostgreSqlClient.Where("code = ?", product.Code).First(&existingProduct)
 	if result.Error == nil && existingProduct.ID != product.ID {
-		v.AddError("code", "bu kod zaten kullanılıyor")
+		v.AddError("code", "this code is already used")
 	}
 }
 func (product Product) ValidateCodeFormat(v *validator.Validator) {
 	// Regular expression to match only letters and numbers
 	validCodePattern := regexp.MustCompile("^[a-zA-Z0-9]+$")
 	if !validCodePattern.MatchString(product.Code) {
-		v.AddError("code", "sadece harf ve sayı içermelidir")
+		v.AddError("code", "must contain only letters and numbers")
 	}
 }

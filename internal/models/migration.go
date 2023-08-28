@@ -15,6 +15,4 @@ func Migrate() {
 	if err != nil {
 		log.Println(err.Error())
 	}
-
-	log.Println("Migration successfully completed")
 }

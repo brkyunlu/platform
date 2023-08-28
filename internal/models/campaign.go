@@ -58,10 +58,10 @@ func GetAllCampaigns() ([]Campaign, error) {
 }
 func ValidateCampaign(v *validator.Validator, campaign *Campaign) {
 	validateCampaignProduct(v, campaign.ProductID)
-	v.Check(campaign.Name != "", "name", "boş bırakılamaz")
-	v.Check(campaign.Duration > 0, "duration", "geçerli bir süre olmalıdır")
-	v.Check(campaign.PriceManipulationLimit >= 0 && campaign.PriceManipulationLimit <= 100, "price_manipulation_limit", "0 ile 100 arasında olmalıdır")
-	v.Check(campaign.TargetSales >= 0, "target_sales", "pozitif bir sayı olmalıdır")
+	v.Check(campaign.Name != "", "name", "cannot be empty")
+	v.Check(campaign.Duration > 0, "duration", "must be a valid duration")
+	v.Check(campaign.PriceManipulationLimit >= 0 && campaign.PriceManipulationLimit <= 100, "price_manipulation_limit", "must be between 0 and 100")
+	v.Check(campaign.TargetSales >= 0, "target_sales", "must be a positive number")
 }
 func validateCampaignProduct(v *validator.Validator, productID int64) {
 	product, _ := Product{}.Find("id", productID)
