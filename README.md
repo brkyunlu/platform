@@ -31,7 +31,7 @@ Bu projeyi çalıştırmak için aşağıdaki adımları takip edebilirsiniz:
 
 ## Kullanım
 
-1. `docker ps` komutunu kullanarak container-id'yi kopyalayın.
+1. `docker ps` komutunu kullanarak platform-app container-id'yi kopyalayın.
 2. `docker exec -it <container-id> sh` komutuyla projenin terminalini açın.
 3. `./scenario.sh` komutunu yazarak senaryo dosyasını çalıştırıp komutların nasıl çalıştığını gözlemleyebilirsiniz.
 
